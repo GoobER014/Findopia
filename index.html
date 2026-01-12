@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>Findopia</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+<style>
+* { touch-action: manipulation; }
+
+body {
+  margin: 0;
+  background: black;
+  color: white;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+button {
+  padding: 14px 22px;
+  margin: 10px;
+  font-family: inherit;
+  border: 3px solid #00ff9c;
+  background: black;
+  color: #00ff9c;
+  font-size: 14px;
+}
+
+/* CAMERA */
+#camera {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* WORLD */
+#world {
+  width: 3000px;
+  height: 3000px;
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* PLAYER */
+#player {
+  width: 40px;
+  height: 40px;
+  background: #00ff9c;
+  position: absolute;
+  z-index: 2;
+}
+
+/* ATTACK RING */
+#attackRing {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border: 3px solid yellow;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#youTag {
+  position: absolute;
+  font-size: 12px;
+  color: yellow;
+  transform: translateY(-14px);
+}
+
+/* ENEMY */
+.enemy {
+  width: 32px;
+  height: 32px;
+  background: #ff4fd8;
+  position: absolute;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.enemy.hit {
+  background: red;
+}
+
+/* BOSS */
+.boss {
+  width: 72px;
+  height: 72px;
+  background: #4fd8ff;
+  box-shadow: 0 0 16px #4fd8ff;
+}
+
+.dead {
+  opacity: 0;
+  transform: scale(0);
+}
+
+/* HEAL */
+.heal {
+  width: 20px;
+  height: 20px;
+  background: #00ff9c;
+  border-radius: 50%;
+  position: absolute;
+  box-shadow: 0 0 10px #00ff9c;
+}
+
+/* HUD */
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  font-size: 14px;
+  z-index: 5;
+}
+
+/* MOBILE CONTROLS */
+#mobileControls {
+  position: fixed;
+  bottom: 10px;
+  width: 100%;
+  display: none;
+  z-index: 5;
+}
+
+.ctrl-row { display:flex; justify-content:center; }
+
+.ctrl-btn {
+  width: 80px;
+  height: 80px;
+  margin: 6px;
+  font-size: 22px;
+  border: 3px solid #00ff9c;
+}
+</style>
+</head>
+
+<body>
+
+<div id="start" class="screen" style="display:flex">
+  <h1 style="color:#ff4fd8">FINDOPIA</h1>
+  <button onclick="choosePlatform('pc')">PC</button>
+  <button onclick="choosePlatform('mobile')">Mobile</button>
+</div>
+
+<div id="game" class="screen">
+  <div id="hud">
+    ❤️ <span id="hp">100</span><br>
+    🌊 Wave <span id="wave">1</span>
+  </div>
+
+  <div id="camera">
+    <div id="world">
+      <div id="attackRing"></div>
+      <div id="player"></div>
+      <div id="youTag">YOU</div>
+    </div>
+  </div>
+
+  <div id="mobileControls">
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="movePlayer(0,-15)">⬆</button>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="movePlayer(-15,0)">⬅</button>
+      <button class="ctrl-btn" onclick="attack()">⚔</button>
+      <button class="ctrl-btn" onclick="movePlayer(15,0)">➡</button>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="movePlayer(0,15)">⬇</button>
+    </div>
+  </div>
+</div>
+
+<div id="lose" class="screen">
+  <h2>You were defeated</h2>
+  <button onclick="location.reload()">Restart</button>
+</div>
+
+<script>
+let hp = 100;
+let wave = 1;
+
+let playerX = 1500;
+let playerY = 1500;
+
+let enemies = [];
+let heals = [];
+let canAttack = true;
+let hitCooldown = false;
+
+const world = document.getElementById("world");
+const camera = document.getElementById("camera");
+const player = document.getElementById("player");
+const youTag = document.getElementById("youTag");
+const attackRing = document.getElementById("attackRing");
+
+/* START */
+function choosePlatform(p){
+  if(p==="mobile") mobileControls.style.display="block";
+  show("game");
+  spawnPlayer();
+  startWave();
+}
+
+/* SCREENS */
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.style.display="none");
+  document.getElementById(id).style.display="flex";
+}
+
+/* PLAYER */
+function spawnPlayer(){
+  playerX=1500; playerY=1500;
+  updatePlayer();
+}
+
+function movePlayer(dx,dy){
+  playerX+=dx; playerY+=dy;
+  updatePlayer();
+}
+
+function updatePlayer(){
+  player.style.left=playerX+"px";
+  player.style.top=playerY+"px";
+  youTag.style.left=playerX+"px";
+  youTag.style.top=playerY+"px";
+
+  camera.scrollLeft = playerX - camera.clientWidth/2;
+  camera.scrollTop  = playerY - camera.clientHeight/2;
+}
+
+/* WAVES */
+function startWave(){
+  clearEnemies();
+  document.getElementById("wave").textContent=wave;
+  for(let i=0;i<wave+2;i++) spawnEnemy();
+  startEnemyAI();
+}
+
+/* ENEMIES */
+function spawnEnemy(){
+  const e=document.createElement("div");
+  e.className="enemy";
+  e.x=Math.random()*2800;
+  e.y=Math.random()*2800;
+  e.hp=50+wave*15;
+  e.dead=false;
+  world.appendChild(e);
+  enemies.push(e);
+  updateEnemy(e);
+}
+
+function updateEnemy(e){
+  e.style.left=e.x+"px";
+  e.style.top=e.y+"px";
+}
+
+/* ATTACK */
+function attack(){
+  if(!canAttack) return;
+  canAttack=false;
+
+  // visual indicator
+  attackRing.style.left=(playerX-40)+"px";
+  attackRing.style.top=(playerY-40)+"px";
+  attackRing.style.opacity=1;
+  setTimeout(()=>attackRing.style.opacity=0,150);
+
+  enemies.forEach(e=>{
+    if(e.dead) return;
+    const dist=Math.hypot(playerX-e.x, playerY-e.y);
+    if(dist<70){
+      e.hp-=25;
+      e.classList.add("hit");
+      setTimeout(()=>e.classList.remove("hit"),100);
+      if(e.hp<=0) killEnemy(e);
+    }
+  });
+
+  setTimeout(()=>canAttack=true,350);
+}
+
+/* AI */
+function startEnemyAI(){
+  setInterval(()=>{
+    enemies.forEach(e=>{
+      if(e.dead) return;
+      const dx=playerX-e.x;
+      const dy=playerY-e.y;
+      e.x+=Math.sign(dx)*1.4;
+      e.y+=Math.sign(dy)*1.4;
+      updateEnemy(e);
+
+      const dist=Math.hypot(dx,dy);
+      if(dist<25 && !hitCooldown){
+        hp-=10;
+        document.getElementById("hp").textContent=hp;
+        hitCooldown=true;
+        setTimeout(()=>hitCooldown=false,600);
+        if(hp<=0) show("lose");
+      }
+    });
+    checkHeals();
+  },30);
+}
+
+/* DEATH + HEAL DROP */
+function killEnemy(e){
+  e.dead=true;
+  e.classList.add("dead");
+
+  // chance to drop heal
+  if(Math.random()<0.35){
+    const h=document.createElement("div");
+    h.className="heal";
+    h.x=e.x; h.y=e.y;
+    h.style.left=h.x+"px";
+    h.style.top=h.y+"px";
+    world.appendChild(h);
+    heals.push(h);
+  }
+
+  setTimeout(()=>{
+    e.remove();
+    enemies=enemies.filter(x=>x!==e);
+    if(enemies.length===0){
+      wave++;
+      startWave();
+    }
+  },200);
+}
+
+/* HEAL PICKUP */
+function checkHeals(){
+  heals.forEach(h=>{
+    const dist=Math.hypot(playerX-h.x, playerY-h.y);
+    if(dist<30){
+      hp=Math.min(100,hp+20);
+      document.getElementById("hp").textContent=hp;
+      h.remove();
+      heals=heals.filter(x=>x!==h);
+    }
+  });
+}
+
+function clearEnemies(){
+  enemies.forEach(e=>e.remove());
+  heals.forEach(h=>h.remove());
+  enemies=[]; heals=[];
+}
+</script>
+
+</body>
+</html>
